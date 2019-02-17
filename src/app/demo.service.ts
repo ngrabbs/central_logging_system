@@ -17,10 +17,14 @@ export class DemoService {
     }
 
     getLogFromId(id) {
-        return this.http.get('http://localhost:3000/querydata/' + id)
+        return this.http.get('http://localhost:3000/querydata/' + id);
     }
 
     toggleLog() {
-        return this.http.get('http://localhost:3000/logger')
+        return this.http.get('http://localhost:3000/logger');
+    }
+
+    loggerStatus() {
+        return this.http.get('http://localhost:3000/logger_status');
     }
 }

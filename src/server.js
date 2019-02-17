@@ -10,33 +10,33 @@ const run_number = 1
 const car_name = 'reggie'
 const track_name = 'yello belly'
 const date = new Date()
-const logging_interval = 3000
+const logging_interval = 30
 var log_id
 var logger_on = false;
+const DEBUG = false;
+
+// create application/json parser
+var jsonParser = bodyParser.json();
 
 // when we start the logger we poll and write as fast as we can, all sensors we have info for
 function get_log_id(callback) {
   if(!log_id) {
-    console.log(date)
-    console.log('not logging yet')
-    console.log('---starting the logger---')
+    if (DEBUG) { console.log(date); }
+    if (DEBUG) { console.log('not logging yet'); }
+    if (DEBUG) { console.log('---starting the logger---'); }
     MongoClient.connect(mongo_url, function(err, db) {
       if (err) throw err;
       var dbo = db.db(database);
       dbo.collection(current_document).insertOne({'run_number': run_number, 'car_name': car_name, 'track_name': track_name }, function(err, res) {
         if (err) throw err;
         log_id = res.insertedId
-        console.log('--- logger started id: ' + res.insertedId + '---')
+        if (DEBUG) { console.log('--- logger started id: ' + res.insertedId + '---'); }
+        db.close();
         callback(log_id);
       })
     })
   }
 }
-
-
-
-// create application/json parser
-var jsonParser = bodyParser.json()
 
 // mongo handler
 function writeMongo(mongo_url, database, current_document, sensor_data) {
@@ -45,7 +45,7 @@ function writeMongo(mongo_url, database, current_document, sensor_data) {
     var dbo = db.db(database);
     dbo.collection(current_document).insertOne(sensor_data, function(err, res) {
       if (err) throw err;
-      console.log("1 document inserted");
+      if (DEBUG) { console.log("1 document inserted"); }
       db.close();
     })
   })
@@ -58,11 +58,11 @@ function updateMongo(mongo_url, database, current_document, id) {
     var dbo = db.db(database);
     var myquery = { _id: id }
     var newvalues = { $push: { data: {time: (new Date), sensors: [{sensor1: 1.2}, {sensor2: 2.0} ] } } }
-    console.log("newvalues: ")
-    console.log(newvalues)
+    if (DEBUG) { console.log("newvalues: "); }
+    if (DEBUG) { console.log(newvalues); }
     dbo.collection(current_document).updateOne(myquery, newvalues, function(err, res) {
       if (err) throw err;
-      console.log("1 document updated");
+      if (DEBUG) { console.log("1 document updated"); }
       db.close();
     })
   })
@@ -84,46 +84,46 @@ app.use((req, res, next) => {
   next();
 });
 
-
-// we're building our response temp data here
-app.use((request, response, next) => {
-  request.temp = 99.9
-  request.date = new Date();
-  next()
-})
-
-// we build the json and send it out as the reponse here
-app.get('/', (request, response) => {
-  // console.log("send out temp: " + request.temp)
-  response.json({
-    temp: request.temp,
-    date: request.date
-  })
-})
-
 // when we turn on the logger we should get a new id
 app.get('/logger', (request, response) => {
   logger_on = !logger_on
   if(logger_on) {
       get_log_id( function(log_id) {
-        console.log("callback: " + log_id )
+        if (DEBUG) { console.log("callback: " + log_id ); }
         response.json({'_id':log_id})
       })
+    setInterval(() => {
+      if(logger_on) {
+        console.log('logger on updating log id: ' + log_id + ' date: ' + new Date());
+        updateMongo(mongo_url, database, current_document, log_id)
+      }
+    }, logging_interval)
   }
   if(!logger_on) {
     log_id = ''
-  }
-  setInterval(() => {
-    if(logger_on) {
-      console.log("log id: " + log_id);
-      console.log(new Date())
-      console.log("LOG: " + date)
-      updateMongo(mongo_url, database, current_document, log_id)
-    }
-  }, logging_interval)
-  if(!logger_on) {
     response.json();
   }
+})
+
+app.get('/logger_status', (request, response) => {
+  response.json({'logger_status':logger_on})
+})
+
+app.get('/querydata/:id',(request, response) => {
+  if (DEBUG) { console.log(request.params.id); }
+  if (DEBUG) { console.log('get data'); }
+  MongoClient.connect(mongo_url, function(err, db) {
+    if (err) throw err;
+    var dbo = db.db(database);
+    var o_id = new ObjectId(request.params.id)
+    var query = { _id: o_id };
+    dbo.collection(current_document).find(query).toArray(function(err, result) {
+      if (err) throw err;
+      if (DEBUG) { console.log(result); }
+      response.json(result)
+      db.close()
+    })
+  })
 })
 
 // recieve data and store into mongo
@@ -133,39 +133,6 @@ app.post('/sensor_data', jsonParser, (request, response) => {
   var sensor_data = { time: request.body.time, sensor: request.body.sensor_name, value: request.body.value }
   writeMongo(mongo_url, database, current_document, sensor_data);
   response.json({'ok': 'cool'})
-})
-
-// query local mongo
-app.get('/mongo',(request, response) => {
-  console.log('call out to mongo')
-  MongoClient.connect(url, function(err, db) {
-    if (err) throw err;
-    var dbo = db.db("mydb");
-    var query = { address: "Park Lane 38" };
-    dbo.collection("customers").find(query).toArray(function(err, result) {
-      if (err) throw err;
-      console.log(result)
-      response.json(result)
-      db.close();
-    });
-  });
-})
-
-app.get('/querydata/:id',(request, response) => {
-  console.log(request.params.id);
-  console.log('get data')
-  MongoClient.connect(mongo_url, function(err, db) {
-    if (err) throw err;
-    var dbo = db.db(database);
-    var o_id = new ObjectId(request.params.id)
-    var query = { _id: o_id };
-    dbo.collection(current_document).find(query).toArray(function(err, result) {
-      if (err) throw err;
-      console.log(result)
-      response.json(result)
-      db.close()
-    })
-  })
 })
 
 app.listen(3000)
