@@ -11,7 +11,20 @@ import { callbackify } from 'util';
   <div *ngIf="!loggerStatus">Logger: Off</div>
   </ng-container>
   <button (click)="toggleLogger()">Log</button>
-  {{date_temp | json}}
+  <ng-container>
+    <div *ngIf="date_temp">
+      <!--{{ date_temp | json }}<br>-->
+              ID: {{ date_temp[0]?._id }} <br>
+      Run Number: {{ date_temp[0]?.run_number }} <br>
+        Car Name: {{ date_temp[0]?.car_name }} <br>
+      Track Name: {{ date_temp[0]?.track_name }} <br>
+      <div *ngFor="let time of date_temp[0].data">{{time.time}}
+        <div *ngFor="let sensor of time.sensors">
+          {{sensor.sensor_name}}: {{sensor.value}}
+        </div>
+      </div>
+    </div>
+  </ng-container>
   `
 })
 export class AppComponent {

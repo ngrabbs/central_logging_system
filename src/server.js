@@ -10,10 +10,11 @@ const run_number = 1
 const car_name = 'reggie'
 const track_name = 'yello belly'
 const date = new Date()
-const logging_interval = 30
+const logging_interval = 3000
 var log_id
 var logger_on = false;
 const DEBUG = false;
+var cached_sensor_data = [];
 
 // create application/json parser
 var jsonParser = bodyParser.json();
@@ -52,17 +53,14 @@ function writeMongo(mongo_url, database, current_document, sensor_data) {
 }
 
 // mongo update
-function updateMongo(mongo_url, database, current_document, id) {
+function updateMongo(mongo_url, database, current_document, id, cached_sensor_data) {
   MongoClient.connect(mongo_url, function(err, db) {
     if (err) throw err;
     var dbo = db.db(database);
     var myquery = { _id: id }
-    var newvalues = { $push: { data: {time: (new Date), sensors: [{sensor1: 1.2}, {sensor2: 2.0} ] } } }
-    if (DEBUG) { console.log("newvalues: "); }
-    if (DEBUG) { console.log(newvalues); }
+    var newvalues = { $push: { data: { time: (new Date), sensors: cached_sensor_data } } }
     dbo.collection(current_document).updateOne(myquery, newvalues, function(err, res) {
       if (err) throw err;
-      if (DEBUG) { console.log("1 document updated"); }
       db.close();
     })
   })
@@ -86,6 +84,8 @@ app.use((req, res, next) => {
 
 // when we turn on the logger we should get a new id
 app.get('/logger', (request, response) => {
+  console.log('---logger info---');
+  console.log(cached_sensor_data);
   logger_on = !logger_on
   if(logger_on) {
       get_log_id( function(log_id) {
@@ -95,12 +95,13 @@ app.get('/logger', (request, response) => {
     setInterval(() => {
       if(logger_on) {
         console.log('logger on updating log id: ' + log_id + ' date: ' + new Date());
-        updateMongo(mongo_url, database, current_document, log_id)
+        updateMongo(mongo_url, database, current_document, log_id, cached_sensor_data);
       }
     }, logging_interval)
   }
   if(!logger_on) {
     log_id = ''
+    cached_sensor_data = [];
     response.json();
   }
 })
@@ -126,13 +127,33 @@ app.get('/querydata/:id',(request, response) => {
   })
 })
 
-// recieve data and store into mongo
-// get the post, put it into mongo
+// need a sensor listener for those actively sending back data
+// we only log during certain increments so we will need to store
+// the sensor data as we receive it and then log that bit of cached
+// data when we call our logging routine.
+// TODO: figure out how to flag if cached data is stale or fresh
 app.post('/sensor_data', jsonParser, (request, response) => {
-  // store into mongo with a time stamp
-  var sensor_data = { time: request.body.time, sensor: request.body.sensor_name, value: request.body.value }
-  writeMongo(mongo_url, database, current_document, sensor_data);
-  response.json({'ok': 'cool'})
+  // if the array is empty then seed it
+  if (cached_sensor_data.length > 0) {
+    array_index = cached_sensor_data.findIndex(function(name) {
+      if(name.sensor_name === request.body.sensor_name) {
+        return name;
+      }
+    })
+    if (array_index >= 0 ) { 
+      // update array 
+      cached_sensor_data[array_index] = {sensor_name: request.body.sensor_name, value: request.body.value};
+    } else {
+      cached_sensor_data.push({sensor_name: request.body.sensor_name, value: request.body.value});
+    }
+  } else {
+    // seed the array
+    cached_sensor_data.push({sensor_name: request.body.sensor_name, value: request.body.value});
+  }
+  response.json()
 })
+
+
+// need a sensor poller for polling listening sensors
 
 app.listen(3000)
