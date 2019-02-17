@@ -1,0 +1,13 @@
+{
+    "id": "string",
+    "run_number": "interger",
+    "car_name": "string",
+    "track_name": "string",
+    "data" : [
+        { "time": "string",
+            "sensors": [
+                { "sensor_name":"sensor1", "value": "string" }
+            ]
+        }
+    ]
+}
